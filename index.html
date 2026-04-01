@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Google Docs Image Copy & Paste Saver</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 1rem;
+    }
+
+    #images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .img-card {
+      border: 1px solid #ccc;
+      padding: 0.5rem;
+      max-width: 260px;
+      font-size: 0.85rem;
+    }
+
+    .img-card img {
+      max-width: 240px;
+      height: auto;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .controls {
+      margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    label {
+      font-size: 0.9rem;
+    }
+
+    #pasteStatus {
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+      color: #333;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Paste Google Docs Images</h2>
+  <div id="intro">
+    <p>
+      This page allows you to save images directly from Google Docs, Sheets,
+      and Slides.
+      </p>
+      <p>
+      Google Workspace apps (at time of authoring this page) don't have a way
+      to save images, charts, or graphics. With this page you can copy
+      images (even multiple at once), paste them here, and
+      save them as files.
+    </p>
+    <p>
+      All processing happens in your browser: nothing is uploaded, and no data
+      of any kind leaves your machine. This is a self-contained single HTML file.
+    </p>
+    <p>
+      Source code:
+      <a href="https://github.com/scheib/google-docs-save-images">github.com/scheib/google-docs-save-images</a>.
+      Hosted here:
+      <a href="https://scheib.github.io/google-docs-save-images/">scheib.github.io/google-docs-save-images</a>.
+    </p>
+  </div>
+  <p>Copy an image (or multiple) from Google Docs and paste here.</p>
+  <label>
+    <input type="checkbox" id="autoSave" />
+    Automatically download PNG/JPEG images on paste
+  </label>
+  <div id="pasteStatus" aria-live="polite"></div>
+  <div id="images"></div>
+
+  <script>
+    (function () {
+      const imagesContainer = document.getElementById("images");
+      const pasteStatusEl = document.getElementById("pasteStatus");
+      const autoSaveCheckbox = document.getElementById("autoSave");
+      const AUTO_SAVE_KEY = "autoSaveOnPaste";
+
+      autoSaveCheckbox.checked = localStorage.getItem(AUTO_SAVE_KEY) === "1";
+      autoSaveCheckbox.addEventListener("change", () => {
+        localStorage.setItem(
+          AUTO_SAVE_KEY,
+          autoSaveCheckbox.checked ? "1" : "0",
+        );
+      });
+
+      function filenameFor(pasteTime, index, ext) {
+        const pad = (n) => String(n).padStart(2, "0");
+        const datePart =
+          pasteTime.getFullYear() +
+          "-" +
+          pad(pasteTime.getMonth() + 1) +
+          "-" +
+          pad(pasteTime.getDate());
+        const timePart =
+          pad(pasteTime.getHours()) +
+          "-" +
+          pad(pasteTime.getMinutes()) +
+          "-" +
+          pad(pasteTime.getSeconds());
+        return (
+          "image_" +
+          datePart +
+          "_" +
+          timePart +
+          "_" +
+          pad(index) +
+          "." +
+          ext
+        );
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
+
+      function blobToImageBitmap(blob) {
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(img);
+          };
+          img.onerror = (e) => {
+            URL.revokeObjectURL(url);
+            reject(e);
+          };
+          img.src = url;
+        });
+      }
+
+      function convertBlobFormat(blob, targetType, quality) {
+        if (blob.type === targetType && targetType !== "") {
+          return Promise.resolve(blob);
+        }
+        return blobToImageBitmap(blob).then((img) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          return new Promise((resolve) => {
+            canvas.toBlob((b) => resolve(b || blob), targetType, quality);
+          });
+        });
+      }
+
+      function createImageCard(blob, index, sourceInfo, pasteTime) {
+        const card = document.createElement("div");
+        card.className = "img-card";
+
+        const imgEl = document.createElement("img");
+        const url = URL.createObjectURL(blob);
+        imgEl.src = url;
+        card.appendChild(imgEl);
+
+        const meta = document.createElement("div");
+        meta.textContent = "Loading size...";
+        card.appendChild(meta);
+
+        const info = {
+          width: null,
+          height: null,
+          sizeBytes: blob.size,
+          type: blob.type || "(unknown)",
+          source: sourceInfo,
+        };
+
+        imgEl.onload = () => {
+          info.width = imgEl.naturalWidth;
+          info.height = imgEl.naturalHeight;
+          meta.textContent =
+            "Type: " +
+            info.type +
+            " | " +
+            info.width +
+            "×" +
+            info.height +
+            " | " +
+            (info.sizeBytes / 1024).toFixed(1) +
+            " KB";
+          console.log(
+            "Image card details: type=" +
+            info.type +
+            " size=" +
+            info.sizeBytes +
+            "B dimensions=" +
+            info.width +
+            "x" +
+            info.height,
+          );
+        };
+
+        const controls = document.createElement("div");
+        controls.className = "controls";
+
+        const isPngOrJpeg =
+          blob.type === "image/png" || blob.type === "image/jpeg";
+
+        let formatSelect = null;
+        if (!isPngOrJpeg) {
+          const label = document.createElement("label");
+          label.textContent = "Save as:";
+          formatSelect = document.createElement("select");
+          [
+            ["png", "PNG"],
+            ["jpeg", "JPEG"],
+          ].forEach(([val, text]) => {
+            const opt = document.createElement("option");
+            opt.value = val;
+            opt.textContent = text;
+            formatSelect.appendChild(opt);
+          });
+          controls.appendChild(label);
+          controls.appendChild(formatSelect);
+        }
+
+        const btn = document.createElement("button");
+        btn.textContent = "Download";
+        btn.addEventListener("click", () => {
+          const targetExt = isPngOrJpeg
+            ? blob.type === "image/png"
+              ? "png"
+              : "jpg"
+            : formatSelect
+              ? formatSelect.value
+              : "png";
+          const targetType = targetExt === "png" ? "image/png" : "image/jpeg";
+          const quality = targetExt === "jpeg" ? 0.92 : undefined;
+          convertBlobFormat(blob, targetType, quality).then((converted) => {
+            downloadBlob(
+              converted,
+              filenameFor(
+                pasteTime,
+                index,
+                targetExt === "jpg" ? "jpg" : targetExt,
+              ),
+            );
+          });
+        });
+        controls.appendChild(btn);
+
+        card.appendChild(controls);
+        imagesContainer.appendChild(card);
+
+        return { blob, isPngOrJpeg, card };
+      }
+
+      function collectClipboardMimeTypes(dataTransfer) {
+        const types = new Set();
+        if (dataTransfer && dataTransfer.types) {
+          for (let i = 0; i < dataTransfer.types.length; i++) {
+            types.add(dataTransfer.types[i]);
+          }
+        }
+        if (dataTransfer && dataTransfer.items) {
+          Array.prototype.forEach.call(dataTransfer.items, (item) => {
+            if (item.type) types.add(item.type);
+          });
+        }
+        return Array.from(types);
+      }
+
+      function showNoImagesInPaste(mimeTypes) {
+        pasteStatusEl.innerHTML = "";
+        const msg = document.createElement("p");
+        msg.textContent = "No images were available in this paste.";
+        pasteStatusEl.appendChild(msg);
+        const typesLine = document.createElement("p");
+        if (mimeTypes.length) {
+          typesLine.textContent =
+            "Clipboard MIME types included: " + mimeTypes.join(", ");
+        } else {
+          typesLine.textContent =
+            "No MIME types were reported (empty or restricted clipboard).";
+        }
+        pasteStatusEl.appendChild(typesLine);
+      }
+
+      function logClipboardDebug(dataTransfer) {
+        if (!dataTransfer) {
+          console.log("No DataTransfer on paste event.");
+          return;
+        }
+        console.log(
+          "clipboardData.types: " +
+          Array.prototype.slice.call(dataTransfer.types).join(", "),
+        );
+        if (dataTransfer.items) {
+          Array.prototype.forEach.call(dataTransfer.items, (item, i) => {
+            console.log("Item", i, "kind=", item.kind, "type=", item.type);
+          });
+        }
+      }
+
+      function extractImagesFromHtml(html) {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const imgs = doc.querySelectorAll("img");
+        console.log("HTML img elements found:", imgs.length);
+        const promises = [];
+        imgs.forEach((img, idx) => {
+          const src = img.getAttribute("src");
+          if (!src) return;
+          console.log("HTML img src", idx, src.slice(0, 200));
+          if (src.startsWith("data:")) {
+            const m = src.match(
+              /^data:(image\/[a-zA-Z0-9+.-]+)?;base64,(.*)$/,
+            );
+            if (!m) return;
+            const mime = m[1] || "image/png";
+            const b64 = m[2];
+            promises.push(
+              new Promise((resolve) => {
+                const byteChars = atob(b64);
+                const bytes = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++)
+                  bytes[i] = byteChars.charCodeAt(i);
+                resolve(new Blob([bytes], { type: mime }));
+              }),
+            );
+          } else if (
+            src.startsWith("http://") ||
+            src.startsWith("https://")
+          ) {
+            promises.push(
+              fetch(src)
+                .then((r) => {
+                  console.log("Fetched HTML img", src, "status", r.status);
+                  return r.blob();
+                })
+                .catch((err) => {
+                  console.error("Failed to fetch HTML img", src, err);
+                  return null;
+                }),
+            );
+          }
+        });
+        return Promise.all(promises).then((blobs) => {
+          const ok = blobs.filter(Boolean);
+          ok.forEach((b, i) => {
+            console.log(
+              "HTML extract image MIME [" + i + "]: " +
+              (b.type || "(empty/unknown)") +
+              " (" + b.size + " bytes)",
+            );
+          });
+          return ok;
+        });
+      }
+
+      document.addEventListener("paste", (event) => {
+        console.log("Paste event", event);
+        const pasteTime = new Date();
+        imagesContainer.innerHTML = "";
+        pasteStatusEl.innerHTML = "";
+
+        const dt = event.clipboardData || window.clipboardData;
+        const mimeTypes = collectClipboardMimeTypes(dt);
+        logClipboardDebug(dt);
+
+        const blobs = [];
+        const htmlStrings = [];
+
+        if (dt && dt.items) {
+          Array.prototype.forEach.call(dt.items, (item) => {
+            if (
+              item.kind === "file" &&
+              item.type &&
+              item.type.indexOf("image/") === 0
+            ) {
+              const file = item.getAsFile();
+              if (file) {
+                console.log(
+                  "Found image file from clipboard: MIME=" +
+                  file.type +
+                  " size=" +
+                  file.size +
+                  " bytes",
+                );
+                blobs.push(file);
+              }
+            } else if (item.type === "text/html") {
+              item.getAsString((html) => {
+                console.log("HTML clipboard fragment length:", html.length);
+                htmlStrings.push(html);
+              });
+            }
+          });
+        }
+
+        setTimeout(() => {
+          if (htmlStrings.length === 0 && blobs.length === 0) {
+            console.warn(
+              "No images or HTML content with images detected in paste.",
+            );
+          }
+
+          const htmlPromises = htmlStrings.map((html) =>
+            extractImagesFromHtml(html),
+          );
+
+          Promise.all(htmlPromises).then((htmlBlobsArrays) => {
+            const htmlBlobs = [].concat.apply([], htmlBlobsArrays);
+            const allBlobs = blobs.concat(htmlBlobs);
+
+            console.log(
+              "Image types discovered: " +
+              allBlobs.length +
+              " image(s); clipboard files " +
+              blobs.length +
+              "; from HTML " +
+              htmlBlobs.length,
+            );
+            allBlobs.forEach((b, i) => {
+              console.log(
+                "Image MIME type [" + i + "]: " +
+                (b.type || "(empty/unknown)") +
+                " (" + b.size + " bytes)",
+              );
+            });
+
+            if (allBlobs.length === 0) {
+              console.warn(
+                "Paste handling completed with no image blobs. MIME types: " +
+                (mimeTypes.length ? mimeTypes.join(", ") : "(none)"),
+              );
+              showNoImagesInPaste(mimeTypes);
+              return;
+            }
+
+            pasteStatusEl.innerHTML = "";
+
+            const autoSave = autoSaveCheckbox.checked;
+            const cards = [];
+            allBlobs.forEach((blob, idx) => {
+              const cardInfo = createImageCard(
+                blob,
+                idx + 1,
+                "clipboard",
+                pasteTime,
+              );
+              cards.push(cardInfo);
+            });
+
+            if (autoSave) {
+              cards.forEach((info, idx) => {
+                if (!info.isPngOrJpeg) {
+                  console.log(
+                    "Auto-save skipped for non-PNG/JPEG image (MIME=" +
+                    (info.blob && info.blob.type
+                      ? info.blob.type
+                      : "(unknown)") +
+                    "). User must choose format manually.",
+                  );
+                  return;
+                }
+                const ext = info.blob.type === "image/png" ? "png" : "jpg";
+                const targetType = info.blob.type;
+                convertBlobFormat(info.blob, targetType).then((converted) => {
+                  downloadBlob(
+                    converted,
+                    filenameFor(
+                      pasteTime,
+                      idx + 1,
+                      ext === "jpg" ? "jpg" : ext,
+                    ),
+                  );
+                });
+              });
+            }
+          });
+        }, 10);
+
+        event.preventDefault();
+      });
+    })();
+  </script>
+</body>
+
+</html>
