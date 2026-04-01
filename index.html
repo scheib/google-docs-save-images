@@ -10,6 +10,10 @@
       margin: 1rem;
     }
 
+    body.has-expanded-card {
+      overflow: hidden;
+    }
+
     #images {
       display: flex;
       flex-wrap: wrap;
@@ -22,6 +26,46 @@
       padding: 0.5rem;
       max-width: 260px;
       font-size: 0.85rem;
+      position: relative;
+    }
+
+    .img-card .img-close {
+      display: none;
+    }
+
+    .img-card.expanded {
+      position: fixed;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1000;
+      max-width: none;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .img-card.expanded .img-close {
+      display: block;
+      flex: 0 0 auto;
+      align-self: flex-end;
+      margin-bottom: 0.25rem;
+    }
+
+    .img-expand-wrap {
+      min-height: 0;
+    }
+
+    .img-card.expanded .img-expand-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
     }
 
     .img-card img {
@@ -29,6 +73,13 @@
       height: auto;
       display: block;
       margin-bottom: 0.25rem;
+      cursor: zoom-in;
+    }
+
+    .img-card.expanded img {
+      cursor: default;
+      max-width: none;
+      margin-bottom: 0;
     }
 
     .controls {
@@ -169,14 +220,56 @@
         });
       }
 
+      function collapseCard(card) {
+        if (!card.classList.contains("expanded")) return;
+        card.classList.remove("expanded");
+        if (!document.querySelector(".img-card.expanded")) {
+          document.body.classList.remove("has-expanded-card");
+        }
+      }
+
+      function expandCard(card, imgEl) {
+        if (!imgEl.naturalWidth) return;
+        document.querySelectorAll(".img-card.expanded").forEach((c) => {
+          collapseCard(c);
+        });
+        card.classList.add("expanded");
+        document.body.classList.add("has-expanded-card");
+        const closeEl = card.querySelector(".img-close");
+        if (closeEl && closeEl.focus) closeEl.focus();
+      }
+
       function createImageCard(blob, index, sourceInfo, pasteTime) {
         const card = document.createElement("div");
         card.className = "img-card";
 
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "img-close";
+        closeBtn.textContent = "Close";
+        closeBtn.setAttribute("aria-label", "Close full size view");
+        closeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          collapseCard(card);
+        });
+
+        const wrap = document.createElement("div");
+        wrap.className = "img-expand-wrap";
+
         const imgEl = document.createElement("img");
         const url = URL.createObjectURL(blob);
         imgEl.src = url;
-        card.appendChild(imgEl);
+        imgEl.alt = "Pasted image preview; click for full size";
+        imgEl.title = "Click to view at 1:1 pixel size";
+        imgEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (card.classList.contains("expanded")) return;
+          expandCard(card, imgEl);
+        });
+
+        wrap.appendChild(imgEl);
+        card.appendChild(closeBtn);
+        card.appendChild(wrap);
 
         const meta = document.createElement("div");
         meta.textContent = "Loading size...";
@@ -375,6 +468,7 @@
       document.addEventListener("paste", (event) => {
         console.log("Paste event", event);
         const pasteTime = new Date();
+        document.body.classList.remove("has-expanded-card");
         imagesContainer.innerHTML = "";
         pasteStatusEl.innerHTML = "";
 
@@ -496,6 +590,15 @@
         }, 10);
 
         event.preventDefault();
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const ex = document.querySelector(".img-card.expanded");
+        if (ex) {
+          e.preventDefault();
+          collapseCard(ex);
+        }
       });
     })();
   </script>
