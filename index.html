@@ -227,15 +227,15 @@
       const originalWarn = console.warn;
       const originalError = console.error;
 
-      console.log = function(...args) {
+      console.log = function (...args) {
         debugLogs.push("[LOG] " + args.join(" "));
         originalLog.apply(console, args);
       };
-      console.warn = function(...args) {
+      console.warn = function (...args) {
         debugLogs.push("[WARN] " + args.join(" "));
         originalWarn.apply(console, args);
       };
-      console.error = function(...args) {
+      console.error = function (...args) {
         debugLogs.push("[ERROR] " + args.join(" "));
         originalError.apply(console, args);
       };
@@ -343,9 +343,10 @@
         if (closeEl && closeEl.focus) closeEl.focus();
       }
 
-      function createImageCard(blob, index, sourceInfo, pasteTime) {
+      function createImageCard(item, index, sourceInfo, pasteTime) {
         const card = document.createElement("div");
         card.className = "img-card";
+        const blob = item.isRemoteURL ? null : item;
 
         const closeBtn = document.createElement("button");
         closeBtn.type = "button";
@@ -361,8 +362,11 @@
         wrap.className = "img-expand-wrap";
 
         const imgEl = document.createElement("img");
-        const url = URL.createObjectURL(blob);
-        imgEl.src = url;
+        if (item.isRemoteURL) {
+          imgEl.src = item.url;
+        } else {
+          imgEl.src = URL.createObjectURL(blob);
+        }
         imgEl.alt = "Pasted image preview; click for full size";
         imgEl.title = "Click to view at 1:1 pixel size";
         imgEl.addEventListener("click", (e) => {
@@ -385,80 +389,94 @@
         const info = {
           width: null,
           height: null,
-          sizeBytes: blob.size,
-          type: blob.type || "(unknown)",
+          sizeBytes: item.size,
+          type: item.type || "(unknown)",
           source: sourceInfo,
         };
 
         imgEl.onload = () => {
           info.width = imgEl.naturalWidth;
           info.height = imgEl.naturalHeight;
-          metaDataDiv.textContent =
-            "Type: " +
-            info.type +
-            " | " +
-            info.width +
-            "×" +
-            info.height +
-            " | " +
-            (info.sizeBytes / 1024).toFixed(1) +
-            " KB";
+          if (item.isRemoteURL) {
+            metaDataDiv.textContent = "Type: Remote Image | " + info.width + "×" + info.height;
+          } else {
+            metaDataDiv.textContent =
+              "Type: " +
+              info.type +
+              " | " +
+              info.width +
+              "×" +
+              info.height +
+              " | " +
+              (info.sizeBytes / 1024).toFixed(1) +
+              " KB";
+          }
           console.log("Image card: " + metaDataDiv.textContent);
         };
+
 
         const controls = document.createElement("div");
         controls.className = "controls";
 
         const isPngOrJpeg =
-          blob.type === "image/png" || blob.type === "image/jpeg";
+          !item.isRemoteURL && (blob.type === "image/png" || blob.type === "image/jpeg");
 
-        let formatSelect = null;
-        if (!isPngOrJpeg) {
-          const label = document.createElement("label");
-          label.textContent = "Save as:";
-          formatSelect = document.createElement("select");
-          [
-            ["png", "PNG"],
-            ["jpeg", "JPEG"],
-          ].forEach(([val, text]) => {
-            const opt = document.createElement("option");
-            opt.value = val;
-            opt.textContent = text;
-            formatSelect.appendChild(opt);
+        if (item.isRemoteURL) {
+          const fallbackMsg = document.createElement("div");
+          fallbackMsg.textContent = "Cannot auto-save. Long-press image on your device to save manually.";
+          fallbackMsg.style.fontSize = "0.85rem";
+          fallbackMsg.style.color = "#d93025";
+          fallbackMsg.style.marginTop = "0.5rem";
+          controls.appendChild(fallbackMsg);
+        } else {
+          let formatSelect = null;
+          if (!isPngOrJpeg) {
+            const label = document.createElement("label");
+            label.textContent = "Save as:";
+            formatSelect = document.createElement("select");
+            [
+              ["png", "PNG"],
+              ["jpeg", "JPEG"],
+            ].forEach(([val, text]) => {
+              const opt = document.createElement("option");
+              opt.value = val;
+              opt.textContent = text;
+              formatSelect.appendChild(opt);
+            });
+            controls.appendChild(label);
+            controls.appendChild(formatSelect);
+          }
+
+          const btn = document.createElement("button");
+          btn.textContent = "Download";
+          btn.addEventListener("click", () => {
+            const targetExt = isPngOrJpeg
+              ? blob.type === "image/png"
+                ? "png"
+                : "jpg"
+              : formatSelect
+                ? formatSelect.value
+                : "png";
+            const targetType = targetExt === "png" ? "image/png" : "image/jpeg";
+            const quality = targetExt === "jpeg" ? 0.92 : undefined;
+            convertBlobFormat(blob, targetType, quality).then((converted) => {
+              downloadBlob(
+                converted,
+                filenameFor(
+                  pasteTime,
+                  index,
+                  targetExt === "jpg" ? "jpg" : targetExt,
+                ),
+              );
+            });
           });
-          controls.appendChild(label);
-          controls.appendChild(formatSelect);
+          controls.appendChild(btn);
         }
-
-        const btn = document.createElement("button");
-        btn.textContent = "Download";
-        btn.addEventListener("click", () => {
-          const targetExt = isPngOrJpeg
-            ? blob.type === "image/png"
-              ? "png"
-              : "jpg"
-            : formatSelect
-              ? formatSelect.value
-              : "png";
-          const targetType = targetExt === "png" ? "image/png" : "image/jpeg";
-          const quality = targetExt === "jpeg" ? 0.92 : undefined;
-          convertBlobFormat(blob, targetType, quality).then((converted) => {
-            downloadBlob(
-              converted,
-              filenameFor(
-                pasteTime,
-                index,
-                targetExt === "jpg" ? "jpg" : targetExt,
-              ),
-            );
-          });
-        });
-        controls.appendChild(btn);
 
         card.appendChild(controls);
         imagesContainer.appendChild(card);
 
-        return { blob, isPngOrJpeg, card };
+        return { item, blob, isPngOrJpeg, isRemoteURL: item.isRemoteURL, card };
       }
 
       function collectClipboardMimeTypes(dataTransfer) {
@@ -563,8 +581,8 @@
                   return r.blob();
                 })
                 .catch((err) => {
-                  console.error("Failed to fetch HTML img", src, err);
-                  return null;
+                  console.error("Failed to fetch HTML img (likely CORS block) => Falling back to URL", src, err);
+                  return { isRemoteURL: true, url: src, type: "remote url", size: 0 };
                 }),
             );
           }
@@ -595,12 +613,12 @@
           console.log("Clipboard MIME types collected: " + mimeTypes.join(", "));
         }
 
-        blobs.forEach((blob) => {
+        blobs.forEach((item) => {
           console.log(
-            "Found image file from clipboard: MIME=" +
-            blob.type +
+            "Found item from clipboard: MIME=" +
+            item.type +
             " size=" +
-            blob.size +
+            item.size +
             " bytes",
           );
         });
@@ -633,9 +651,10 @@
           );
           allBlobs.forEach((b, i) => {
             console.log(
-              "Image MIME type [" + i + "]: " +
+              "Image item [" + i + "]: " +
               (b.type || "(empty/unknown)") +
-              " (" + b.size + " bytes)",
+              " (" + b.size + " bytes)" +
+              (b.isRemoteURL ? " (Remote URL)" : "")
             );
           });
 
@@ -667,20 +686,16 @@
           });
 
           if (autoSave) {
-            cards.forEach((info, idx) => {
-              if (!info.isPngOrJpeg) {
+            cards.forEach((card, idx) => {
+              if (card.isRemoteURL || !card.isPngOrJpeg) {
                 console.log(
-                  "Auto-save skipped for non-PNG/JPEG image (MIME=" +
-                  (info.blob && info.blob.type
-                    ? info.blob.type
-                    : "(unknown)") +
-                  "). User must choose format manually.",
+                  "Auto-save skipped for item type=" + card.item.type
                 );
                 return;
               }
-              const ext = info.blob.type === "image/png" ? "png" : "jpg";
-              const targetType = info.blob.type;
-              convertBlobFormat(info.blob, targetType).then((converted) => {
+              const ext = card.blob.type === "image/png" ? "png" : "jpg";
+              const targetType = card.blob.type;
+              convertBlobFormat(card.blob, targetType).then((converted) => {
                 downloadBlob(
                   converted,
                   filenameFor(
