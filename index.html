@@ -222,6 +222,24 @@
 
   <script>
     (function () {
+      let debugLogs = [];
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const originalError = console.error;
+
+      console.log = function(...args) {
+        debugLogs.push("[LOG] " + args.join(" "));
+        originalLog.apply(console, args);
+      };
+      console.warn = function(...args) {
+        debugLogs.push("[WARN] " + args.join(" "));
+        originalWarn.apply(console, args);
+      };
+      console.error = function(...args) {
+        debugLogs.push("[ERROR] " + args.join(" "));
+        originalError.apply(console, args);
+      };
+
       const imagesContainer = document.getElementById("images");
       const pasteStatusEl = document.getElementById("pasteStatus");
       const autoSaveCheckbox = document.getElementById("autoSave");
@@ -458,13 +476,48 @@
         return Array.from(types);
       }
 
-      function showNoImagesInPaste(mimeTypes) {
+      function createDebugLink(htmlStrings) {
+        let debugText = "User Agent: " + navigator.userAgent + "\n\n";
+        debugText += "--- CONSOLE LOGS ---\n" + debugLogs.join("\n") + "\n\n";
+
+        if (htmlStrings && htmlStrings.length > 0) {
+          htmlStrings.forEach((html, i) => {
+            debugText += "--- HTML " + i + " ---\n";
+            debugText += html + "\n\n";
+          });
+        } else {
+          debugText += "--- HTML ---\n(no HTML content)\n\n";
+        }
+
+        const copyBtn = document.createElement("a");
+        copyBtn.href = "#";
+        copyBtn.textContent = "Copy debug text";
+        copyBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(debugText).then(() => {
+              copyBtn.textContent = "Copied!";
+              setTimeout(() => { copyBtn.textContent = "Copy debug text"; }, 2000);
+            }).catch(err => {
+              console.error("Failed to copy", err);
+              copyBtn.textContent = "Failed to copy";
+            });
+          } else {
+            console.warn("Clipboard writeText not supported.");
+          }
+        });
+        return copyBtn;
+      }
+
+      function showNoImagesInPaste(mimeTypes, htmlStrings) {
         pasteStatusEl.innerHTML = "";
         const msg = document.createElement("p");
-        msg.textContent = "No images were available in this paste.";
+        msg.textContent = "No images were available in this paste. ";
+        msg.appendChild(createDebugLink(htmlStrings));
         pasteStatusEl.appendChild(msg);
+
         const typesLine = document.createElement("p");
-        if (mimeTypes.length) {
+        if (mimeTypes && mimeTypes.length) {
           typesLine.textContent =
             "Clipboard MIME types included: " + mimeTypes.join(", ");
         } else {
@@ -530,6 +583,7 @@
       }
 
       function resetUIForPaste() {
+        debugLogs = [];
         document.body.classList.remove("has-expanded-card");
         imagesContainer.innerHTML = "";
         pasteStatusEl.innerHTML = "Reading clipboard...";
@@ -590,11 +644,15 @@
               "Paste handling completed with no image blobs. MIME types: " +
               (mimeTypes.length ? mimeTypes.join(", ") : "(none)"),
             );
-            showNoImagesInPaste(mimeTypes);
+            showNoImagesInPaste(mimeTypes, htmlStrings);
             return;
           }
 
           pasteStatusEl.innerHTML = "";
+          const successMsg = document.createElement("p");
+          successMsg.textContent = "Found " + allBlobs.length + " image(s). ";
+          successMsg.appendChild(createDebugLink(htmlStrings));
+          pasteStatusEl.appendChild(successMsg);
 
           const autoSave = autoSaveCheckbox.checked;
           const cards = [];
