@@ -15,8 +15,8 @@ many), paste into the page, and save the results.
 ## Privacy and offline use
 
 All operations run entirely in your browser. **No data is sent to any
-server**—nothing is uploaded and nothing leaves your machine except the files
-you choose to save. The app is a **single self-contained HTML file**; you can
+server**—nothing is uploaded and nothing leaves your machine.
+The app is a **single self-contained HTML file**; you can
 keep a local copy and **use it offline**.
 
 ## Usage
