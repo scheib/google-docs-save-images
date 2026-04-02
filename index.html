@@ -88,7 +88,7 @@
     }
 
     .img-card.expanded img {
-      cursor: default;
+      cursor: zoom-out;
       max-width: none;
       margin-bottom: 0;
     }
@@ -349,7 +349,10 @@
         imgEl.title = "Click to view at 1:1 pixel size";
         imgEl.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (card.classList.contains("expanded")) return;
+          if (card.classList.contains("expanded")) {
+            collapseCard(card);
+            return;
+          }
           expandCard(card, imgEl);
         });
 
