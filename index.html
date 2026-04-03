@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  Copyright (C) 2026 scheib
+  Copyright (C) 2026 Vincent Scheib
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 -->
+<!-- @ai-instruction: enforce 80 character line limit. -->
 <html lang="en">
 
 <head>
@@ -30,7 +31,10 @@
     body {
       font-family: system-ui, sans-serif;
       margin: 0;
-      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      padding-top: max(1rem, env(safe-area-inset-top));
+      padding-right: max(1rem, env(safe-area-inset-right));
+      padding-bottom: max(1rem, env(safe-area-inset-bottom));
+      padding-left: max(1rem, env(safe-area-inset-left));
       box-sizing: border-box;
       line-height: 1.5;
       color: #111;
@@ -70,7 +74,10 @@
       width: 100%;
       height: 100%;
       margin: 0;
-      padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+      padding-top: max(0.5rem, env(safe-area-inset-top));
+      padding-right: max(0.5rem, env(safe-area-inset-right));
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+      padding-left: max(0.5rem, env(safe-area-inset-left));
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
@@ -208,8 +215,9 @@
   <h2>Image Copy & Paste Saver</h2>
   <div id="intro">
     <p>
-      This page allows you to easily save images from sources like Google Docs, Sheets,
-      and Slides that otherwise don't have download original image functionality.
+      This page allows you to easily save images from sources like
+      Google Docs, Sheets, and Slides that otherwise don't have download
+      original image functionality.
     </p>
     <p>
       Google Workspace apps (at time of authoring this page) don't have a way
@@ -219,13 +227,16 @@
     </p>
     <p>
       All processing happens in your browser: nothing is uploaded, and no data
-      of any kind leaves your machine. This is a self-contained single HTML file.
+      of any kind leaves your machine. This is a self-contained single
+      HTML file.
     </p>
     <p>
       Source code:
-      <a href="https://github.com/scheib/google-docs-save-images">github.com/scheib/google-docs-save-images</a>.
-      Hosted here:
-      <a href="https://scheib.github.io/google-docs-save-images/">scheib.github.io/google-docs-save-images</a>.
+      <a href="https://github.com/scheib/google-docs-save-images">
+        github.com/scheib/google-docs-save-images</a>.<br>
+      Hosted Web App:
+      <a href="https://scheib.github.io/google-docs-save-images/">
+        scheib.github.io/google-docs-save-images</a>.
     </p>
   </div>
   <p>Copy an image (or multiple) from Google Docs and paste or drop here.</p>
@@ -420,7 +431,8 @@
           info.width = imgEl.naturalWidth;
           info.height = imgEl.naturalHeight;
           if (item.isRemoteURL) {
-            metaDataDiv.textContent = "Type: Remote Image | " + info.width + "×" + info.height;
+            metaDataDiv.textContent = "Type: Remote Image | " + info.width +
+              "×" + info.height;
           } else {
             metaDataDiv.textContent =
               "Type: " +
@@ -441,11 +453,13 @@
         controls.className = "controls";
 
         const isPngOrJpeg =
-          !item.isRemoteURL && (blob.type === "image/png" || blob.type === "image/jpeg");
+          !item.isRemoteURL &&
+          (blob.type === "image/png" || blob.type === "image/jpeg");
 
         if (item.isRemoteURL) {
           const fallbackMsg = document.createElement("div");
-          fallbackMsg.textContent = "Cannot auto-save. Long-press image on your device to save manually.";
+          fallbackMsg.textContent = "Cannot auto-save. " +
+            "Long-press image on your device to save manually.";
           fallbackMsg.style.fontSize = "0.85rem";
           fallbackMsg.style.color = "#d93025";
           fallbackMsg.style.marginTop = "0.5rem";
@@ -537,7 +551,9 @@
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(debugText).then(() => {
               copyBtn.textContent = "Copied!";
-              setTimeout(() => { copyBtn.textContent = "Copy debug text"; }, 2000);
+              setTimeout(() => {
+                copyBtn.textContent = "Copy debug text";
+              }, 2000);
             }).catch(err => {
               console.error("Failed to copy", err);
               copyBtn.textContent = "Failed to copy";
@@ -603,8 +619,12 @@
                   return r.blob();
                 })
                 .catch((err) => {
-                  console.error("Failed to fetch HTML img (likely CORS block) => Falling back to URL", src, err);
-                  return { isRemoteURL: true, url: src, type: "remote url", size: 0 };
+                  console.error(
+                    "Failed to fetch HTML img (likely CORS block) => " +
+                    "Falling back to URL", src, err);
+                  return {
+                    isRemoteURL: true, url: src, type: "remote url", size: 0
+                  };
                 }),
             );
           }
@@ -632,7 +652,8 @@
       function processPasteContent(blobs, htmlStrings, mimeTypes, pasteTime) {
         console.log("Processing clipboard content...");
         if (mimeTypes && mimeTypes.length > 0) {
-          console.log("Clipboard MIME types collected: " + mimeTypes.join(", "));
+          console.log("Clipboard MIME types collected: " +
+            mimeTypes.join(", "));
         }
 
         blobs.forEach((item) => {
