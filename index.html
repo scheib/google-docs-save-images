@@ -1,10 +1,26 @@
 <!doctype html>
+<!--
+  Copyright (C) 2026 scheib
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
 <html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Google Docs Image Copy & Paste Saver</title>
+  <title>Image Copy & Paste Saver</title>
   <style>
     html {
       -webkit-text-size-adjust: 100%;
@@ -142,6 +158,12 @@
       color: #333;
     }
 
+    #pasteTarget.dragover {
+      border-color: #333;
+      background: #e0e0e0;
+      color: #333;
+    }
+
     #pasteTarget small {
       font-size: 0.85em;
       opacity: 0.8;
@@ -183,17 +205,17 @@
 </head>
 
 <body>
-  <h2>Paste Google Docs Images</h2>
+  <h2>Image Copy & Paste Saver</h2>
   <div id="intro">
     <p>
-      This page allows you to save images directly from Google Docs, Sheets,
-      and Slides.
+      This page allows you to easily save images from sources like Google Docs, Sheets,
+      and Slides that otherwise don't have download original image functionality.
     </p>
     <p>
       Google Workspace apps (at time of authoring this page) don't have a way
       to save images, charts, or graphics. With this page you can copy
       images (even multiple at once), paste them here, and
-      save them as files.
+      save them as files. This works from many other sources as well.
     </p>
     <p>
       All processing happens in your browser: nothing is uploaded, and no data
@@ -206,11 +228,11 @@
       <a href="https://scheib.github.io/google-docs-save-images/">scheib.github.io/google-docs-save-images</a>.
     </p>
   </div>
-  <p>Copy an image (or multiple) from Google Docs and paste here.</p>
+  <p>Copy an image (or multiple) from Google Docs and paste or drop here.</p>
 
-  <div id="pasteTarget" contenteditable="true" aria-label="Paste target">
-    <strong>Tap here</strong> and select "Paste"<br>
-    <small>(Or press Ctrl+V / Cmd+V anywhere)</small>
+  <div id="pasteTarget" contenteditable="true" aria-label="Paste or drop target">
+    <strong>Tap here</strong> (and "Paste" if needed),<br>
+    or press Ctrl+V / Cmd+V
   </div>
 
   <label>
@@ -710,11 +732,57 @@
         });
       }
 
+      function processDataTransfer(dt) {
+        const pasteTime = new Date();
+        resetUIForPaste();
+
+        const mimeTypes = collectClipboardMimeTypes(dt);
+        const blobs = [];
+        const htmlStrings = [];
+
+        if (dt && dt.items && dt.items.length > 0) {
+          Array.prototype.forEach.call(dt.items, (item) => {
+            if (
+              item.kind === "file" &&
+              item.type &&
+              item.type.indexOf("image/") === 0
+            ) {
+              const file = item.getAsFile();
+              if (file) {
+                blobs.push(file);
+              }
+            } else if (item.type === "text/html") {
+              item.getAsString((html) => {
+                htmlStrings.push(html);
+              });
+            }
+          });
+        } else if (dt && dt.files && dt.files.length > 0) {
+          Array.prototype.forEach.call(dt.files, (file) => {
+            if (file.type && file.type.indexOf("image/") === 0) {
+              blobs.push(file);
+            }
+          });
+        }
+
+        setTimeout(() => {
+          processPasteContent(blobs, htmlStrings, mimeTypes, pasteTime);
+        }, 10);
+      }
+
       const pasteTarget = document.getElementById("pasteTarget");
       if (pasteTarget) {
         const lockedPasteTargetText = pasteTarget.innerHTML;
         pasteTarget.addEventListener("input", () => {
           pasteTarget.innerHTML = lockedPasteTargetText;
+        });
+
+        pasteTarget.addEventListener("dragover", () => {
+          pasteTarget.classList.add("dragover");
+        });
+
+        pasteTarget.addEventListener("dragleave", () => {
+          pasteTarget.classList.remove("dragover");
         });
 
         pasteTarget.addEventListener("click", async () => {
@@ -753,38 +821,26 @@
         if (pasteTarget) {
           pasteTarget.blur();
         }
-        const pasteTime = new Date();
-        resetUIForPaste();
-
         const dt = event.clipboardData || window.clipboardData;
-        const mimeTypes = collectClipboardMimeTypes(dt);
-        const blobs = [];
-        const htmlStrings = [];
-
-        if (dt && dt.items) {
-          Array.prototype.forEach.call(dt.items, (item) => {
-            if (
-              item.kind === "file" &&
-              item.type &&
-              item.type.indexOf("image/") === 0
-            ) {
-              const file = item.getAsFile();
-              if (file) {
-                blobs.push(file);
-              }
-            } else if (item.type === "text/html") {
-              item.getAsString((html) => {
-                htmlStrings.push(html);
-              });
-            }
-          });
+        if (dt) {
+          processDataTransfer(dt);
         }
-
-        setTimeout(() => {
-          processPasteContent(blobs, htmlStrings, mimeTypes, pasteTime);
-        }, 10);
-
         event.preventDefault();
+      });
+
+      document.addEventListener("dragover", (event) => {
+        event.preventDefault();
+      });
+
+      document.addEventListener("drop", (event) => {
+        event.preventDefault();
+        if (pasteTarget) {
+          pasteTarget.classList.remove("dragover");
+          pasteTarget.blur();
+        }
+        if (event.dataTransfer) {
+          processDataTransfer(event.dataTransfer);
+        }
       });
 
       document.addEventListener("keydown", (e) => {
